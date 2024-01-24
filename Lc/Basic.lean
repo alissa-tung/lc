@@ -55,7 +55,6 @@ declare_syntax_cat lc
 syntax ident : lc
 syntax "let " ident " := " lc " in " lc : lc
 syntax "fun " ident " => " lc : lc
-syntax lc ppSpace lc : lc
 syntax lc (ppSpace colGt lc)+ : lc
 syntax "( " lc " )" : lc
 
@@ -67,7 +66,10 @@ unsafe def parseTerm : TSyntax `lc -> _root_.Term
       .letIn s!"{x}" (parseTerm term) (parseTerm rest)
   | `(lc| fun $x => $body) =>
       .lam s!"{x}" $ parseTerm body
-  | `(lc| $f:lc $x:lc) => .app (parseTerm f) (parseTerm x)
+  | `(lc| $f:lc $xs:lc*) =>
+      (xs.map parseTerm).foldl
+        (fun acc x => .app acc x)
+        (parseTerm f)
   | `(lc| ( $x:lc )) => parseTerm x
   | _ => .var "___ERROR___parseTerm"
 
@@ -76,9 +78,8 @@ syntax (name := lc_term) "LC[" lc "]" : term
 def toTerm : _root_.Term -> TermElabM Expr
   | .var name => return q(_root_.Term.var $name)
   | .lam x body => do
-      let body <- toTerm body
       let f : Expr := q(_root_.Term.lam $x)
-      return Expr.app f body
+      return Expr.app f (<- toTerm body)
   | .app f x => do
       return Expr.app (<- toTerm f) (<- toTerm x)
   | .letIn name defs rest => do
@@ -103,3 +104,14 @@ unsafe def evalLcTerm : TermElab := fun stx _ =>
   let id := fun x => x in
   (id id)
 ]
+#eval LC[
+  let id := fun x => x in
+  (id id) id (id id)
+]
+#eval LC[
+  let id := fun x => x in
+  id id id id
+]
+
+-- https://en.wikipedia.org/wiki/Church_encoding
+-- Church numerals
